@@ -1,0 +1,23 @@
+<div class="investigate-content">
+  <h3 class="investigate-title">🕵️ Transaction Investigation</h3>
+
+  <div class="quick-analysis-card">
+    <h4 class="analysis-title">Quick Analysis</h4>
+    <p>Transaction Hash: <code class="hash-code">{{TX_HASH}}</code></p>
+    <p class="status-line">Status: <span class="status-failed">Failed</span></p>
+  </div>
+
+  <div class="action-buttons">
+    <button class="action-btn analyze-btn">
+      Analyze Error
+    </button>
+    <button class="action-btn etherscan-btn">
+      View on Etherscan
+    </button>
+    <button class="action-btn tenderly-btn">
+      Debug on Tenderly
+    </button>
+  </div>
+
+  <div id="analysis-results" class="analysis-results"></div>
+</div>

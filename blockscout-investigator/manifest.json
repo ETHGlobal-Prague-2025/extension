@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "Blockscout Investigate Tab",
+  "version": "1.2",
+  "description": "Adds an Investigate tab with debugging tools for failed transactions on Blockscout explorers.",
+  "permissions": [
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.blockscout.com/*",
+    "*://blockscout.com/*",
+    "*://eth.blockscout.com/*",
+    "*://optimism.blockscout.com/*",
+    "*://polygon.blockscout.com/*",
+    "*://gnosis.blockscout.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.blockscout.com/tx/*",
+        "*://blockscout.com/tx/*",
+        "*://eth.blockscout.com/tx/*",
+        "*://optimism.blockscout.com/tx/*",
+        "*://polygon.blockscout.com/tx/*",
+        "*://gnosis.blockscout.com/tx/*"
+      ],
+      "js": [
+        "content.js",
+        "tab-manager.js",
+        "investigate-actions.js"
+      ],
+      "css": [
+        "investigate-panel.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "investigate-panel.html",
+        "analysis-results.html"
+      ],
+      "matches": [
+        "*://*.blockscout.com/*",
+        "*://blockscout.com/*",
+        "*://eth.blockscout.com/*",
+        "*://optimism.blockscout.com/*",
+        "*://polygon.blockscout.com/*",
+        "*://gnosis.blockscout.com/*"
+      ]
+    }
+  ],
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
