@@ -1,0 +1,41 @@
+# Contract verification generated files
+verification_*/
+verification/
+temp_check/
+temp_info/
+extracted_contracts/
+fastcctp_analysis/
+contract_*/
+
+# Etherscan data files
+fetched_etherscan_data.json
+ethscandump.json
+
+# Compilation outputs
+compilation_output.json
+solc_config.json
+*.txt
+
+# Bytecode files
+*bytecode*.txt
+*runtime*.txt
+*creation*.txt
+*sourcemap*.txt
+
+# Metadata files
+metadata.json
+
+# Build artifacts
+abi.json
+compile.sh
+README.md
+
+# Temporary files
+.DS_Store
+*.log
+*.tmp
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo 

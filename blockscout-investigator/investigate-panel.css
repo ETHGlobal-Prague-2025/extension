@@ -1,11 +1,15 @@
+/* Base styles (light theme) */
 .investigate-content {
   padding: 20px;
+  color: #1a202c;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .investigate-title {
   margin-bottom: 16px;
   font-size: 18px;
   font-weight: bold;
+  color: #2d3748;
 }
 
 .quick-analysis-card {
@@ -13,18 +17,23 @@
   padding: 16px;
   border-radius: 8px;
   margin-bottom: 16px;
+  border: 1px solid #e2e8f0;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .analysis-title {
   font-weight: bold;
   margin-bottom: 8px;
+  color: #2d3748;
 }
 
 .hash-code {
   background: #e2e8f0;
+  color: #2d3748;
   padding: 2px 4px;
   border-radius: 4px;
   font-family: monospace;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .status-line {
@@ -97,17 +106,117 @@
   padding: 12px;
   border-radius: 6px;
   border-left: 4px solid #e53e3e;
+  transition: background-color 0.2s ease;
 }
 
 .analysis-error-title {
   font-weight: bold;
   margin-bottom: 4px;
+  color: #c53030;
 }
 
 .analysis-error-list {
   margin-left: 20px;
+  color: #c53030;
 }
 
 .analysis-error-list li {
   margin-bottom: 4px;
+}
+
+/* Dark theme styles */
+.theme-dark .investigate-content {
+  color: #f7fafc;
+}
+
+.theme-dark .investigate-title {
+  color: #e2e8f0;
+}
+
+.theme-dark .quick-analysis-card {
+  background: #2d3748;
+  border-color: #4a5568;
+}
+
+.theme-dark .analysis-title {
+  color: #e2e8f0;
+}
+
+.theme-dark .hash-code {
+  background: #4a5568;
+  color: #e2e8f0;
+}
+
+.theme-dark .status-failed {
+  color: #fc8181;
+}
+
+.theme-dark .action-btn:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.theme-dark .analyze-btn {
+  background: #4299e1;
+}
+
+.theme-dark .analyze-btn:hover {
+  background: #3182ce;
+}
+
+.theme-dark .etherscan-btn {
+  background: #48bb78;
+}
+
+.theme-dark .etherscan-btn:hover {
+  background: #38a169;
+}
+
+.theme-dark .tenderly-btn {
+  background: #9f7aea;
+}
+
+.theme-dark .tenderly-btn:hover {
+  background: #805ad5;
+}
+
+.theme-dark .analysis-loading {
+  color: #a0aec0;
+}
+
+.theme-dark .analysis-error-card {
+  background: #742a2a;
+  border-left-color: #fc8181;
+}
+
+.theme-dark .analysis-error-title {
+  color: #fc8181;
+}
+
+.theme-dark .analysis-error-list {
+  color: #fc8181;
+}
+
+/* Auto-detect system theme as fallback */
+@media (prefers-color-scheme: dark) {
+  .investigate-content:not(.theme-light):not(.theme-dark) {
+    color: #f7fafc;
+  }
+
+  .investigate-title:not(.theme-light):not(.theme-dark) {
+    color: #e2e8f0;
+  }
+
+  .quick-analysis-card:not(.theme-light):not(.theme-dark) {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+
+  .analysis-title:not(.theme-light):not(.theme-dark) {
+    color: #e2e8f0;
+  }
+
+  .hash-code:not(.theme-light):not(.theme-dark) {
+    background: #4a5568;
+    color: #e2e8f0;
+  }
 }

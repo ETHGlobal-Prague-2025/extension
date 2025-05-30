@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Simple wrapper for contract verification
+# Usage: ./verify <contract_address>
+
+if [ $# -eq 0 ]; then
+    echo "Usage: ./verify <contract_address>"
+    echo "Example: ./verify 0x57e9e78a627baa30b71793885b952a9006298af6"
+    exit 1
+fi
+
+CONTRACT_ADDRESS=$1
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "🔍 Verifying contract: $CONTRACT_ADDRESS"
+echo ""
+
+python3 "$SCRIPT_DIR/verify_simple.py" "$CONTRACT_ADDRESS" 

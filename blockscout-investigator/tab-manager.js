@@ -15,6 +15,12 @@ class TabManager {
       this.handleTabCreationRequest();
     });
 
+    // Listen for theme changes
+    document.addEventListener('themeChanged', (event) => {
+      console.log('🎨 Received theme change event:', event.detail);
+      this.applyThemeToExistingPanels(event.detail.theme);
+    });
+
     // Also try immediate setup for transaction pages
     const isTransactionPage = window.location.pathname.includes('/tx/');
     if (isTransactionPage) {
@@ -369,6 +375,15 @@ class TabManager {
       investigateTab.classList.remove('chakra-tabs__tab--selected');
       investigateTab.setAttribute('data-state', 'inactive');
     }
+  }
+
+  applyThemeToExistingPanels(theme) {
+    const investigatePanels = document.querySelectorAll('#investigate-panel');
+    investigatePanels.forEach(panel => {
+      panel.className = panel.className.replace(/theme-(light|dark)/g, '');
+      panel.classList.add(`theme-${theme}`);
+      console.log(`🎨 Applied ${theme} theme to investigate panel`);
+    });
   }
 }
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Blockscout Investigate Tab",
-  "version": "1.2",
+  "version": "1.3",
   "description": "Adds an Investigate tab with debugging tools for failed transactions on Blockscout explorers.",
   "permissions": [
     "scripting",
@@ -27,6 +27,7 @@
       ],
       "js": [
         "content.js",
+        "theme-detector.js",
         "tab-manager.js",
         "investigate-actions.js"
       ],
