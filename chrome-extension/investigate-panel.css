@@ -74,15 +74,6 @@
   background: #2c5aa0;
 }
 
-.etherscan-btn {
-  background: #38a169;
-  color: white;
-}
-
-.etherscan-btn:hover {
-  background: #2f855a;
-}
-
 .tenderly-btn {
   background: #805ad5;
   color: white;
@@ -163,14 +154,6 @@
   background: #3182ce;
 }
 
-.theme-dark .etherscan-btn {
-  background: #48bb78;
-}
-
-.theme-dark .etherscan-btn:hover {
-  background: #38a169;
-}
-
 .theme-dark .tenderly-btn {
   background: #9f7aea;
 }
@@ -220,3 +203,409 @@
     color: #e2e8f0;
   }
 }
+
+/* Analysis Progress Styles */
+.analysis-progress {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.current-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 20px;
+  margin-top: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.action-text {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #2d3748;
+  transition: color 0.2s ease;
+}
+
+.action-text.action-stage {
+  color: #3182ce;
+  font-weight: bold;
+}
+
+.action-text.action-script {
+  color: #805ad5;
+}
+
+.action-text.action-complete {
+  color: #38a169;
+  font-weight: bold;
+}
+
+.action-text.action-error {
+  color: #e53e3e;
+  font-weight: bold;
+}
+
+.loading-dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.loading-dots span {
+  width: 12px;
+  height: 12px;
+  background: #3182ce;
+  border-radius: 50%;
+  animation: loading-bounce 1.2s ease-in-out infinite both;
+  transition: background-color 0.2s ease;
+}
+
+.loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes loading-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.4);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* Analysis Results Styles */
+.analysis-complete {
+  margin-top: 20px;
+  padding: 16px;
+  background: #f0fff4;
+  border: 1px solid #9ae6b4;
+  border-radius: 8px;
+}
+
+.analysis-result {
+  margin-top: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.analysis-content {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #2d3748;
+}
+
+.analysis-content h1 {
+  font-size: 20px;
+  font-weight: bold;
+  margin: 20px 0 12px 0;
+  color: #1a202c;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 8px;
+}
+
+.analysis-content h2 {
+  font-size: 18px;
+  font-weight: bold;
+  margin: 16px 0 8px 0;
+  color: #2d3748;
+}
+
+.analysis-content h3 {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 12px 0 6px 0;
+  color: #4a5568;
+}
+
+.analysis-content p {
+  margin: 8px 0;
+}
+
+.analysis-content strong {
+  font-weight: bold;
+  color: #1a202c;
+}
+
+.analysis-content em {
+  font-style: italic;
+}
+
+.analysis-content code {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 12px;
+  color: #e53e3e;
+}
+
+.analysis-content pre {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.analysis-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #2d3748;
+  font-size: 12px;
+}
+
+.analysis-content ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.analysis-content li {
+  margin: 4px 0;
+}
+
+.analysis-content hr {
+  border: none;
+  height: 2px;
+  background: #e2e8f0;
+  margin: 16px 0;
+  border-radius: 1px;
+}
+
+.analysis-actions {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.analysis-actions .action-btn {
+  background: #3182ce;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.analysis-actions .action-btn:hover {
+  background: #2c5aa0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Dark theme for analysis progress */
+.analysis-progress.theme-dark {
+  background: #2d3748;
+  border-color: #4a5568;
+  color: #e2e8f0;
+}
+
+.theme-dark .current-action,
+.current-action.theme-dark {
+  background: #1a202c;
+  border-color: #4a5568;
+}
+
+.theme-dark .action-text,
+.action-text.theme-dark {
+  color: #e2e8f0;
+}
+
+.theme-dark .action-text.action-stage,
+.action-text.action-stage.theme-dark {
+  color: #63b3ed;
+}
+
+.theme-dark .action-text.action-script,
+.action-text.action-script.theme-dark {
+  color: #b794f6;
+}
+
+.theme-dark .action-text.action-complete,
+.action-text.action-complete.theme-dark {
+  color: #68d391;
+}
+
+.theme-dark .action-text.action-error,
+.action-text.action-error.theme-dark {
+  color: #fc8181;
+}
+
+.theme-dark .loading-dots span,
+.loading-dots span.theme-dark {
+  background: #63b3ed;
+}
+
+.analysis-complete.theme-dark {
+  background: #22543d;
+  border-color: #68d391;
+}
+
+.analysis-content.theme-dark {
+  background: #1a202c;
+  border-color: #4a5568;
+  color: #e2e8f0;
+}
+
+.analysis-content.theme-dark h1 {
+  color: #f7fafc;
+  border-bottom-color: #4a5568;
+}
+
+.analysis-content.theme-dark h2 {
+  color: #e2e8f0;
+}
+
+.analysis-content.theme-dark h3 {
+  color: #a0aec0;
+}
+
+.analysis-content.theme-dark strong {
+  color: #f7fafc;
+}
+
+.analysis-content.theme-dark code {
+  background: #2d3748;
+  border-color: #4a5568;
+  color: #fc8181;
+}
+
+.analysis-content.theme-dark pre {
+  background: #2d3748;
+  border-color: #4a5568;
+}
+
+.analysis-content.theme-dark pre code {
+  color: #e2e8f0;
+}
+
+.analysis-content.theme-dark hr {
+  background: #4a5568;
+}
+
+.analysis-actions .action-btn.theme-dark {
+  background: #4299e1;
+  color: white;
+}
+
+.analysis-actions .action-btn.theme-dark:hover {
+  background: #3182ce;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Auto-detect system theme as fallback */
+@media (prefers-color-scheme: dark) {
+  .analysis-progress:not(.theme-light):not(.theme-dark) {
+    background: #2d3748;
+    border-color: #4a5568;
+    color: #e2e8f0;
+  }
+
+  .current-action:not(.theme-light):not(.theme-dark) {
+    background: #1a202c;
+    border-color: #4a5568;
+  }
+
+  .action-text:not(.theme-light):not(.theme-dark) {
+    color: #e2e8f0;
+  }
+
+  .action-text.action-stage:not(.theme-light):not(.theme-dark) {
+    color: #63b3ed;
+  }
+
+  .action-text.action-script:not(.theme-light):not(.theme-dark) {
+    color: #b794f6;
+  }
+
+  .action-text.action-complete:not(.theme-light):not(.theme-dark) {
+    color: #68d391;
+  }
+
+  .action-text.action-error:not(.theme-light):not(.theme-dark) {
+    color: #fc8181;
+  }
+
+  .loading-dots span:not(.theme-light):not(.theme-dark) {
+    background: #63b3ed;
+  }
+
+  .analysis-complete:not(.theme-light):not(.theme-dark) {
+    background: #22543d;
+    border-color: #68d391;
+  }
+
+  .analysis-content:not(.theme-light):not(.theme-dark) {
+    background: #1a202c;
+    border-color: #4a5568;
+    color: #e2e8f0;
+  }
+
+  .analysis-content h1:not(.theme-light):not(.theme-dark) {
+    color: #f7fafc;
+    border-bottom-color: #4a5568;
+  }
+
+  .analysis-content h2:not(.theme-light):not(.theme-dark) {
+    color: #e2e8f0;
+  }
+
+  .analysis-content h3:not(.theme-light):not(.theme-dark) {
+    color: #a0aec0;
+  }
+
+  .analysis-content strong:not(.theme-light):not(.theme-dark) {
+    color: #f7fafc;
+  }
+
+  .analysis-content code:not(.theme-light):not(.theme-dark) {
+    background: #2d3748;
+    border-color: #4a5568;
+    color: #fc8181;
+  }
+
+  .analysis-content pre:not(.theme-light):not(.theme-dark) {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+
+  .analysis-content pre code:not(.theme-light):not(.theme-dark) {
+    color: #e2e8f0;
+  }
+
+  .analysis-content hr:not(.theme-light):not(.theme-dark) {
+    background: #4a5568;
+  }
+
+  .analysis-actions .action-btn:not(.theme-light):not(.theme-dark) {
+    background: #4299e1;
+    color: white;
+  }
+
+  .analysis-actions .action-btn:hover:not(.theme-light):not(.theme-dark) {
+    background: #3182ce;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+} 

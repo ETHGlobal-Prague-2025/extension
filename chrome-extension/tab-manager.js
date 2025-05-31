@@ -39,10 +39,75 @@ class TabManager {
   handleTabCreationRequest() {
     console.log('🎯 Handling tab creation request...');
 
-    // Check if tab already exists
-    if (document.getElementById("investigate-tab")) {
-      console.log('ℹ️ Investigate tab already exists');
-      return;
+    // Check if tab already exists AND is properly attached
+    const existingTab = document.getElementById("investigate-tab");
+    if (existingTab) {
+      console.log('ℹ️ Investigate tab element exists, checking if properly attached...');
+      console.log('📍 Tab parent:', existingTab.parentElement);
+      console.log('📍 Tab visible:', existingTab.offsetParent !== null);
+      console.log('📍 Tab in DOM:', document.contains(existingTab));
+      console.log('📍 Tab classList:', existingTab.classList.toString());
+      console.log('📍 Tab computed style display:', window.getComputedStyle(existingTab).display);
+      console.log('📍 Tab computed style visibility:', window.getComputedStyle(existingTab).visibility);
+      console.log('📍 Tab parent element info:', {
+        tagName: existingTab.parentElement?.tagName,
+        className: existingTab.parentElement?.className,
+        role: existingTab.parentElement?.getAttribute('role')
+      });
+      
+      // Additional debugging for positioning and styling
+      const rect = existingTab.getBoundingClientRect();
+      const computedStyle = window.getComputedStyle(existingTab);
+      console.log('📍 Tab dimensions:', {
+        width: rect.width,
+        height: rect.height,
+        top: rect.top,
+        left: rect.left,
+        bottom: rect.bottom,
+        right: rect.right
+      });
+      console.log('📍 Tab styling:', {
+        color: computedStyle.color,
+        backgroundColor: computedStyle.backgroundColor,
+        opacity: computedStyle.opacity,
+        zIndex: computedStyle.zIndex,
+        position: computedStyle.position,
+        overflow: computedStyle.overflow
+      });
+      console.log('📍 Parent container styling:', {
+        overflow: window.getComputedStyle(existingTab.parentElement).overflow,
+        overflowX: window.getComputedStyle(existingTab.parentElement).overflowX,
+        width: existingTab.parentElement.getBoundingClientRect().width,
+        scrollWidth: existingTab.parentElement.scrollWidth
+      });
+      
+      // Check if tab is in viewport
+      const isInViewport = (rect.top >= 0 && rect.left >= 0 && 
+                           rect.bottom <= window.innerHeight && 
+                           rect.right <= window.innerWidth);
+      console.log('📍 Tab in viewport:', isInViewport);
+      
+      // Try to scroll the tab into view
+      existingTab.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      console.log('📍 Attempted to scroll tab into view');
+      
+      // Check all existing tabs for comparison
+      const allTabs = document.querySelectorAll('[role="tab"]');
+      console.log('📍 All tabs on page:', Array.from(allTabs).map(tab => ({
+        id: tab.id,
+        text: tab.textContent.trim(),
+        visible: tab.offsetParent !== null,
+        parent: tab.parentElement?.tagName + '.' + tab.parentElement?.className
+      })));
+      
+      // If tab exists but isn't properly attached, remove and recreate
+      if (!existingTab.parentElement || !document.contains(existingTab)) {
+        console.log('🔧 Tab exists but not properly attached, removing...');
+        existingTab.remove();
+      } else {
+        console.log('ℹ️ Investigate tab already exists and is properly attached');
+        return;
+      }
     }
 
     // Try to add the tab
@@ -143,6 +208,13 @@ class TabManager {
       if (tabBar) {
         selectorUsed = selector;
         console.log(`📍 Tab bar found with selector: ${selector}`);
+        console.log('📍 Tab bar info:', {
+          tagName: tabBar.tagName,
+          className: tabBar.className,
+          children: tabBar.children.length,
+          visible: tabBar.offsetParent !== null,
+          display: window.getComputedStyle(tabBar).display
+        });
         break;
       }
     }
@@ -156,14 +228,25 @@ class TabManager {
       return;
     }
 
-    if (document.getElementById("investigate-tab")) {
-      console.log('ℹ️ Investigate tab already exists');
-      return;
-    }
-
+    console.log('🔧 Creating new investigate tab element...');
     const newTab = this.createTabElement();
+    
+    console.log('🔧 New tab info before appending:', {
+      id: newTab.id,
+      className: newTab.className,
+      textContent: newTab.textContent,
+      role: newTab.getAttribute('role')
+    });
+    
+    console.log('🔧 Appending tab to tabBar...');
     tabBar.appendChild(newTab);
+    
     console.log('✅ Investigate tab added successfully to:', selectorUsed);
+    console.log('📍 Tab now in DOM:', document.contains(newTab));
+    console.log('📍 Tab parent:', newTab.parentElement);
+    console.log('📍 Tab visible:', newTab.offsetParent !== null);
+    console.log('📍 Tab position in parent:', Array.from(tabBar.children).indexOf(newTab));
+    console.log('📍 Tab siblings:', Array.from(tabBar.children).map(child => child.textContent.trim()));
 
     // Set up integration with existing tabs
     setTimeout(() => {
@@ -176,7 +259,7 @@ class TabManager {
     newTab.id = "investigate-tab";
     newTab.role = "tab";
     newTab.type = "button";
-    newTab.innerText = "Investigate";
+    newTab.innerText = "AI Analyze";
 
     // Set proper attributes to match Blockscout's tab structure
     newTab.setAttribute('data-scope', 'tabs');
@@ -201,6 +284,18 @@ class TabManager {
     } else {
       newTab.className = "group chakra-tabs__trigger css-3g7lbw";
     }
+
+    // Ensure the tab is visible by setting explicit styles
+    newTab.style.visibility = 'visible';
+    newTab.style.display = 'flex';
+    newTab.style.position = 'relative';  // Override any absolute positioning
+    newTab.style.top = 'auto';           // Reset top position
+    newTab.style.left = 'auto';          // Reset left position
+    newTab.style.transform = 'none';     // Reset any transforms
+    
+    console.log('📍 Tab visibility set to:', newTab.style.visibility);
+    console.log('📍 Tab display set to:', newTab.style.display);
+    console.log('📍 Tab position set to:', newTab.style.position);
 
     newTab.onclick = (e) => {
       e.preventDefault();
