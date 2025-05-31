@@ -20,7 +20,6 @@ class InvestigationActions {
       "Teaching machine learning about human learning curves...",
       "Converting transaction logs to haikus...",
       "Asking Ethereum if it's feeling okay today...",
-      "Translating Solidity errors to human language...",
       "Consulting the blockchain gods for wisdom..."
     ];
     this.funnyMessageInterval = null;

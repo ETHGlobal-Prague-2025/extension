@@ -259,7 +259,7 @@ class TabManager {
     newTab.id = "investigate-tab";
     newTab.role = "tab";
     newTab.type = "button";
-    newTab.innerText = "AI Analyze";
+    newTab.innerText = "✨ Analyze";
 
     // Set proper attributes to match Blockscout's tab structure
     newTab.setAttribute('data-scope', 'tabs');
