@@ -8,6 +8,8 @@ import os
 import stat
 from pathlib import Path
 from .etherscan import extract_constructor_arguments
+import subprocess
+from typing import Dict, Tuple
 
 
 def clean_source_code(source):
@@ -126,6 +128,112 @@ def extract_sources_from_etherscan_data(etherscan_data, output_dir):
     return metadata, sources
 
 
+def extract_sources_from_blockscout_data(blockscout_data, output_dir):
+    """Extract sources from already-loaded Blockscout API data."""
+    if not (blockscout_data.get('is_verified') or blockscout_data.get('is_partially_verified')):
+        print("Contract is not verified on Blockscout")
+        return None, None
+
+    # Extract basic metadata
+    metadata = {
+        'name': blockscout_data.get('name', 'Unknown'),
+        'compiler': blockscout_data.get('compiler_version', 'v0.8.0'),
+        'optimization': blockscout_data.get('optimization_enabled', False),
+        'runs': str(blockscout_data.get('optimization_runs', 200)),
+        'evm_version': blockscout_data.get('evm_version', 'default')
+    }
+
+    # Extract constructor arguments
+    constructor_info = extract_constructor_arguments(blockscout_data)
+    if constructor_info:
+        metadata['constructor_args'] = constructor_info
+        print(f"📋 {constructor_info['info']}")
+        if constructor_info['decoded']:
+            print("🔧 Constructor parameters:")
+            for param in constructor_info['decoded']:
+                print(f"   {param}")
+
+    # Get source code and file path
+    source_code = blockscout_data.get('source_code', '')
+    file_path = blockscout_data.get('file_path', 'main.sol')
+    
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Write the source file
+    full_path = Path(output_dir) / file_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Clean and write the source code
+    cleaned_content = clean_source_code(source_code)
+    with open(full_path, 'w', encoding='utf-8') as f:
+        f.write(cleaned_content)
+
+    print(f"Created: {full_path}")
+
+    # Create sources dict for compilation
+    sources = {
+        file_path: {
+            'content': cleaned_content
+        }
+    }
+
+    # Add additional sources to sources
+    additional_sources = blockscout_data.get('additional_sources', [])
+    for source in additional_sources:
+        source_path = source.get('file_path')
+        source_content = source.get('source_code')
+        if source_path and source_content:
+            source_full_path = Path(output_dir) / source_path
+            source_full_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(source_full_path, 'w', encoding='utf-8') as f:
+                f.write(clean_source_code(source_content))
+            print(f"Created additional source: {source_full_path}")
+            sources[source_path] = {
+                'content': clean_source_code(source_content)
+            }
+
+    # Auto-detect and configure remappings based on file structure
+    remappings = []
+    output_path = Path(output_dir)
+    
+    # Check for common library patterns and create remappings
+    if (output_path / "lib" / "solady" / "src").exists():
+        remappings.append("solady/=lib/solady/src/")
+        print("✅ Added solady remapping: solady/=lib/solady/src/")
+    
+    if (output_path / "lib" / "sol-json" / "src").exists():
+        remappings.append("sol-json/=lib/sol-json/src/")
+        print("✅ Added sol-json remapping: sol-json/=lib/sol-json/src/")
+    
+    # Check for other common patterns
+    for lib_dir in (output_path / "lib").glob("*") if (output_path / "lib").exists() else []:
+        if lib_dir.is_dir() and lib_dir.name not in ["solady", "sol-json"]:
+            # Check if it has a src directory
+            if (lib_dir / "src").exists():
+                mapping = f"{lib_dir.name}/={lib_dir.relative_to(output_path)}/src/"
+                remappings.append(mapping)
+                print(f"✅ Added {lib_dir.name} remapping: {mapping}")
+    
+    # Add remappings to metadata for use in compilation config
+    if remappings:
+        metadata['remappings'] = remappings
+
+    # Add compiler settings if available
+    if 'compiler_settings' in blockscout_data:
+        settings = blockscout_data['compiler_settings']
+        if 'optimizer' in settings:
+            metadata['optimization'] = settings['optimizer'].get('enabled', metadata['optimization'])
+            metadata['runs'] = str(settings['optimizer'].get('runs', metadata['runs']))
+        if 'evmVersion' in settings:
+            metadata['evm_version'] = settings['evmVersion']
+        # Extract viaIR setting if available
+        if 'viaIR' in settings:
+            metadata['viaIR'] = settings['viaIR']
+    
+    return metadata, sources
+
+
 def create_compilation_config(metadata, output_dir):
     """Create a solc compilation configuration file."""
     
@@ -150,7 +258,7 @@ def create_compilation_config(metadata, output_dir):
         "settings": {
             "optimizer": {
                 "enabled": metadata.get('optimization', False),
-                "runs": int(metadata.get('runs', '200')) if metadata.get('runs', '').isdigit() else 200
+                "runs": int(metadata.get('runs', '200')) if str(metadata.get('runs', '')).isdigit() else 200
             },
             "outputSelection": {
                 "*": {
@@ -169,6 +277,11 @@ def create_compilation_config(metadata, output_dir):
     # If viaIR not in metadata, don't add it at all
     
     # Add remappings if available (for contracts with node_modules dependencies)
+    # First check if remappings are in metadata (e.g., from Blockscout auto-detection)
+    if 'remappings' in metadata:
+        solc_config['settings']['remappings'] = metadata['remappings']
+        print(f"✅ Added remappings from metadata: {metadata['remappings']}")
+    
     # Check if we have a metadata.json file that contains original Etherscan data
     metadata_file = Path(output_dir) / "metadata.json"
     if metadata_file.exists():
@@ -186,10 +299,10 @@ def create_compilation_config(metadata, output_dir):
                 # Parse as JSON
                 source_json = json.loads(source_code)
                 
-                # Extract remappings if they exist
-                if 'settings' in source_json and 'remappings' in source_json['settings']:
+                # Extract remappings if they exist (only if not already set from metadata)
+                if 'settings' in source_json and 'remappings' in source_json['settings'] and 'remappings' not in solc_config['settings']:
                     solc_config['settings']['remappings'] = source_json['settings']['remappings']
-                    print(f"✅ Added remappings: {source_json['settings']['remappings']}")
+                    print(f"✅ Added remappings from Etherscan: {source_json['settings']['remappings']}")
                 
                 # Also extract other settings like evmVersion if available
                 original_settings = source_json.get('settings', {})
@@ -219,10 +332,19 @@ def create_compilation_config(metadata, output_dir):
         except (json.JSONDecodeError, KeyError, IndexError) as e:
             print(f"⚠️ Could not parse original settings: {e}")
     
-    # Add EVM version if specified in metadata
+    # Add EVM version if specified in metadata and not default
     evm_version = metadata.get('evm_version', 'default')
     if evm_version and evm_version.lower() != 'default':
-        solc_config["settings"]["evmVersion"] = evm_version.lower()
+        # For Solidity 0.5.x and below, only allow byzantium or constantinople
+        if major == 0 and minor <= 5:
+            if evm_version.lower() in ['byzantium', 'constantinople']:
+                solc_config["settings"]["evmVersion"] = evm_version.lower()
+            else:
+                print(f"⚠️  Omitting unsupported evmVersion '{evm_version}' for Solidity {compiler_version}")
+        else:
+            # For newer versions, keep previous logic
+            solc_config["settings"]["evmVersion"] = evm_version.lower()
+    # If not set or default, do not add evmVersion at all
     
     # Add all source files to the config
     output_path = Path(output_dir)
@@ -372,4 +494,68 @@ def save_constructor_and_metadata(metadata, output_dir):
         json.dump(metadata, f, indent=2)
     print(f"💾 Saved metadata to: {metadata_file}")
     
-    return constructor_file if constructor_info.get('hex') else None 
+    return constructor_file if constructor_info.get('hex') else None
+
+
+def compile_contract(sources: Dict[str, Dict], metadata: Dict, output_dir: str) -> Tuple[bool, str]:
+    """
+    Compile the contract using solc.
+    
+    Args:
+        sources: Dictionary of source files with their content
+        metadata: Compiler metadata
+        output_dir: Directory to save compilation output
+        
+    Returns:
+        Tuple of (success, output file path)
+    """
+    try:
+        # Create compilation config
+        config = {
+            'language': 'Solidity',
+            'sources': sources,
+            'settings': {
+                'compilationTarget': {
+                    list(sources.keys())[0]: metadata.get('name', 'Unknown')
+                },
+                'evmVersion': 'byzantium',
+                'libraries': {},
+                'optimizer': {
+                    'enabled': metadata.get('optimization', False),
+                    'runs': int(metadata.get('runs', 200))
+                },
+                'remappings': [],
+                'outputSelection': {
+                    '*': {
+                        '*': ['*']
+                    }
+                }
+            }
+        }
+        
+        # Write config to file
+        config_path = Path(output_dir) / 'compiler_config.json'
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        # Run solc
+        result = subprocess.run(
+            ['solc', '--standard-json', str(config_path)],
+            capture_output=True,
+            text=True
+        )
+        
+        # Save output
+        output_path = Path(output_dir) / 'compilation_output.json'
+        with open(output_path, 'w') as f:
+            f.write(result.stdout)
+        
+        if result.returncode != 0:
+            print(f"❌ Compilation failed: {result.stderr}")
+            return False, str(output_path)
+        
+        return True, str(output_path)
+        
+    except Exception as e:
+        print(f"❌ Compilation error: {str(e)}")
+        return False, "" 

@@ -176,6 +176,44 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Step 3.5: Extract and save raw runtime sourcemap
+echo "🗺️ Extracting runtime sourcemap..."
+python3 -c "
+import sys
+sys.path.append('..')
+import json
+
+try:
+    with open('compilation_output.json', 'r') as f:
+        compilation_output = json.load(f)
+    
+    # Extract runtime sourcemap
+    contracts = compilation_output.get('contracts', {})
+    sourcemap_found = False
+    
+    for file_path, file_contracts in contracts.items():
+        for contract_name, contract_data in file_contracts.items():
+            evm = contract_data.get('evm', {})
+            deployed_bytecode = evm.get('deployedBytecode', {})
+            sourcemap = deployed_bytecode.get('sourceMap', '')
+            
+            if sourcemap:
+                with open('runtime_sourcemap.txt', 'w') as f:
+                    f.write(sourcemap)
+                print(f'✅ Runtime sourcemap saved to: runtime_sourcemap.txt')
+                print(f'📊 Sourcemap length: {len(sourcemap)} characters')
+                sourcemap_found = True
+                break
+        if sourcemap_found:
+            break
+    
+    if not sourcemap_found:
+        print('⚠️ No runtime sourcemap found in compilation output')
+    
+except Exception as e:
+    print(f'⚠️ Sourcemap extraction error: {e}')
+"
+
 # Step 4: Extract and compare bytecode
 echo "🔍 Comparing bytecode..."
 
@@ -256,6 +294,11 @@ print(f'✅ Trimmed bytecodes: {len(compiled)} vs {len(deployed)} chars')
     echo "   Compiled:  $COMPILED_SIZE chars"
     echo "   Deployed:  $DEPLOYED_SIZE chars"
     echo "   Difference: $((COMPILED_SIZE - DEPLOYED_SIZE)) chars"
+    
+    # Check if sourcemap file was generated
+    if [ -f "runtime_sourcemap.txt" ]; then
+        echo "   📄 Runtime sourcemap saved: runtime_sourcemap.txt"
+    fi
     
     if cmp -s compiled_runtime.txt deployed_runtime.txt; then
         echo "🎉 PERFECT MATCH! 100% IDENTICAL BYTECODES!"
