@@ -82,7 +82,7 @@ def convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, bytecode):
     
     return ';'.join(pc_sourcemap)
 
-def convert_sourcemap_to_json_array(sourcemap, sources=None):
+def convert_sourcemap_to_json_array(sourcemap, sources=None, context_lines=5):
     """
     Convert sourcemap string to JSON array of objects with pc,s,l,f,j,m,code keys
     Only includes non-empty entries with their PC positions and source code snippets
@@ -90,9 +90,10 @@ def convert_sourcemap_to_json_array(sourcemap, sources=None):
     Args:
         sourcemap (str): Sourcemap string with semicolon-separated entries
         sources (dict): Dictionary of source files {file_index: {"content": "source code"}}
+        context_lines (int): Number of lines to include before and after the fragment for context
         
     Returns:
-        list: Array of objects with keys pc,s,l,f,j,m,code (only non-empty entries)
+        list: Array of objects with keys pc,s,l,f,j,m,code,context_code (only non-empty entries)
     """
     if not sourcemap:
         return []
@@ -122,21 +123,64 @@ def convert_sourcemap_to_json_array(sourcemap, sources=None):
             if len(parts) > 3 and parts[3]: prev_j = j
             if len(parts) > 4 and parts[4]: prev_m = m
             
-            # Extract source code snippet
+            # Extract source code snippet with context
             code = ""
+            context_code = ""
+            fragment_start_line = None
+            
             if sources and f in sources and s.isdigit() and l.isdigit():
                 try:
                     start_pos = int(s)
                     length = int(l)
                     source_content = sources[f].get('content', '')
+                    
                     if start_pos >= 0 and length > 0 and start_pos < len(source_content):
                         end_pos = min(start_pos + length, len(source_content))
+                        
+                        # Extract exact fragment
                         code = source_content[start_pos:end_pos]
+                        
+                        # Extract with context if context_lines > 0
+                        if context_lines > 0:
+                            # Find line boundaries
+                            lines = source_content.split('\n')
+                            
+                            # Find which line the start_pos is on
+                            current_pos = 0
+                            start_line = 0
+                            for i, line in enumerate(lines):
+                                if current_pos + len(line) + 1 > start_pos:  # +1 for newline
+                                    start_line = i
+                                    break
+                                current_pos += len(line) + 1
+                            
+                            # Find which line the end_pos is on
+                            current_pos = 0
+                            end_line = 0
+                            for i, line in enumerate(lines):
+                                if current_pos + len(line) + 1 > end_pos:
+                                    end_line = i
+                                    break
+                                current_pos += len(line) + 1
+                            
+                            # Calculate context boundaries
+                            context_start_line = max(0, start_line - context_lines)
+                            context_end_line = min(len(lines) - 1, end_line + context_lines)
+                            
+                            # Extract context lines
+                            context_lines_list = lines[context_start_line:context_end_line + 1]
+                            context_code = '\n'.join(context_lines_list)
+                            
+                            # Store which line in the context the fragment starts
+                            fragment_start_line = start_line - context_start_line
+                        
                 except (ValueError, KeyError, IndexError):
                     code = ""
+                    context_code = ""
+                    fragment_start_line = None
             
             # Create JSON object for this non-empty entry
-            json_array.append({
+            entry_obj = {
                 "pc": pc,
                 "s": s,
                 "l": l, 
@@ -144,7 +188,13 @@ def convert_sourcemap_to_json_array(sourcemap, sources=None):
                 "j": j,
                 "m": m,
                 "code": code
-            })
+            }
+            
+            # Add context code if available
+            if context_lines > 0 and context_code:
+                entry_obj["context_code"] = context_code
+            
+            json_array.append(entry_obj)
     
     return json_array
 
@@ -205,7 +255,8 @@ def verify_contract():
     Request JSON:
     {
         "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-        "expand_sourcemap": false  // Optional: expand non-empty sourcemap entries to 5 parameters
+        "expand_sourcemap": false,  // Optional: expand non-empty sourcemap entries to 5 parameters
+        "context_lines": 5          // Optional: number of context lines before/after code fragments (default: 5)
     }
     
     Response JSON:
@@ -214,7 +265,7 @@ def verify_contract():
         "contract_address": "0x...",
         "contract_name": "UniswapV2Router02",
         "sourcemap": "26978:430:0:-:0;;;;;;12:1:-1;9;2:12",
-        "jsonSourceMap": [{"s": "26978", "l": "430", "f": "0", "j": "-", "m": "0"}, {"s": "12", "l": "1", "f": "-1", "j": "9", "m": "2"}, {"s": "2", "l": "12", "f": "0", "j": "-", "m": "0"}],
+        "jsonSourceMap": [{"pc": 0, "s": "26978", "l": "430", "f": "0", "j": "-", "m": "0", "code": "contract code", "context_code": "...context..."}],
         "sources": {
             "0": {
                 "path": "main.sol",
@@ -226,7 +277,8 @@ def verify_contract():
             "compiler_version": "v0.6.6+commit.6c089d02",
             "bytecode_match": true,
             "sourcemap_type": "pc_based",
-            "sourcemap_expanded": false
+            "sourcemap_expanded": false,
+            "context_lines": 5
         }
     }
     """
@@ -241,12 +293,19 @@ def verify_contract():
         
         contract_address = data['address']
         expand_sourcemap = data.get('expand_sourcemap', False)  # Optional parameter
+        context_lines = data.get('context_lines', 5)  # Optional parameter, default 5 lines
         
-        # Validate address format
+        # Validate parameters
         if not contract_address.startswith('0x') or len(contract_address) != 42:
             return jsonify({
                 "success": False,
                 "error": "Invalid contract address format"
+            }), 400
+        
+        if not isinstance(context_lines, int) or context_lines < 0:
+            return jsonify({
+                "success": False,
+                "error": "context_lines must be a non-negative integer"
             }), 400
         
         # Run contract verification
@@ -282,7 +341,7 @@ def verify_contract():
             }), 500
         
         # Extract data from verification results
-        response_data = extract_verification_data(verification_dir, contract_address, expand_sourcemap)
+        response_data = extract_verification_data(verification_dir, contract_address, expand_sourcemap, context_lines)
         
         print(f"✅ Verification completed for {contract_address}")
         return jsonify(response_data)
@@ -294,7 +353,7 @@ def verify_contract():
         }), 500
 
 
-def extract_verification_data(verification_dir, contract_address, expand_sourcemap=False):
+def extract_verification_data(verification_dir, contract_address, expand_sourcemap=False, context_lines=5):
     """Extract sourcemap and source files from verification directory"""
     
     # Read sourcemap
@@ -489,7 +548,7 @@ def extract_verification_data(verification_dir, contract_address, expand_sourcem
     bytecode_match = "PERFECT MATCH" in open(os.path.join(verification_dir, '../verification.log'), 'a+').read() if os.path.exists(os.path.join(verification_dir, '../verification.log')) else None
     
     # Generate JSON sourcemap array
-    json_sourcemap = convert_sourcemap_to_json_array(sourcemap, sources)
+    json_sourcemap = convert_sourcemap_to_json_array(sourcemap, sources, context_lines)
     
     return {
         "success": True,
@@ -506,7 +565,8 @@ def extract_verification_data(verification_dir, contract_address, expand_sourcem
             "sourcemap_size": len(sourcemap),
             "json_sourcemap_entries": len(json_sourcemap),
             "sourcemap_type": "pc_based",
-            "sourcemap_expanded": expand_sourcemap
+            "sourcemap_expanded": expand_sourcemap,
+            "context_lines": context_lines
         }
     }
 
@@ -531,7 +591,8 @@ def home():
                 "description": "Verify contract and get sourcemap with source files",
                 "body": {
                     "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
-                    "expand_sourcemap": "false (optional - expand non-empty sourcemap entries to 5 parameters)"
+                    "expand_sourcemap": "false (optional - expand non-empty sourcemap entries to 5 parameters)",
+                    "context_lines": "5 (optional - number of context lines before/after code fragments)"
                 },
                 "response": {
                     "success": True,
@@ -555,6 +616,8 @@ def home():
         "usage": [
             "curl -X POST http://localhost:5000/verify -H 'Content-Type: application/json' -d '{\"address\": \"0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D\"}'",
             "curl -X POST http://localhost:5000/verify -H 'Content-Type: application/json' -d '{\"address\": \"0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D\", \"expand_sourcemap\": true}'",
+            "curl -X POST http://localhost:5000/verify -H 'Content-Type: application/json' -d '{\"address\": \"0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D\", \"context_lines\": 5}'",
+            "curl -X POST http://localhost:5000/verify -H 'Content-Type: application/json' -d '{\"address\": \"0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D\", \"expand_sourcemap\": true, \"context_lines\": 0}'",
             "curl http://localhost:5000/health"
         ]
     })
