@@ -6,6 +6,26 @@
 if [ $# -eq 0 ]; then
     echo "Usage: ./ultimate_verify.sh <contract_address>"
     echo "Example: ./ultimate_verify.sh 0x57e9e78a627baa30b71793885b952a9006298af6"
+    echo ""
+    echo "API Key Setup:"
+    echo "  Either create config.json with your API key:"
+    echo "    python3 config_utils.py"
+    echo "  Or set environment variable:"
+    echo "    export ETHERSCAN_API_KEY=your_key_here"
+    exit 1
+fi
+
+# Check for API key
+API_KEY=""
+if [ -f "config.json" ]; then
+    API_KEY=$(python3 -c "from src.core.config import get_api_key; print(get_api_key() or '')")
+fi
+
+if [ -z "$API_KEY" ]; then
+    echo "❌ No Etherscan API key found!"
+    echo "📋 Please set up your API key:"
+    echo "   1. Run: ./setup_config"
+    echo "   2. Or set: export ETHERSCAN_API_KEY=your_key_here"
     exit 1
 fi
 
@@ -27,7 +47,58 @@ echo "✅ Cleanup completed"
 
 # Step 1: Fetch and compile with auto-detection
 echo "📡 Fetching contract and auto-detecting compiler..."
-python3 prepare_solc_data.py --address "$CONTRACT_ADDRESS" --api-key 3423448X2KEQ7MPR9825NGUY99AHVUG51C --output "$OUTPUT_DIR" >/dev/null 2>&1
+python3 -c "
+import sys
+sys.path.append('.')
+from src.core.etherscan import fetch_contract_from_etherscan, extract_constructor_arguments
+from src.core.compiler import extract_sources_from_etherscan_data, create_compilation_config, save_constructor_and_metadata, create_compilation_script
+from src.core.config import get_api_key
+import os
+
+try:
+    api_key = get_api_key()
+    if not api_key:
+        print('❌ No API key found')
+        sys.exit(1)
+    
+    contract_data = fetch_contract_from_etherscan('$CONTRACT_ADDRESS', api_key)
+    if not contract_data:
+        print('❌ Failed to fetch contract data')
+        sys.exit(1)
+    
+    output_dir = '$OUTPUT_DIR'
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Extract sources
+    num_files = extract_sources_from_etherscan_data(contract_data, output_dir)
+    print(f'✅ Extracted {num_files} source files')
+    
+    # Transform metadata to expected format
+    etherscan_result = contract_data['result'][0]
+    transformed_metadata = {
+        'compiler': etherscan_result['CompilerVersion'],
+        'name': etherscan_result['ContractName'],
+        'optimization': etherscan_result['OptimizationUsed'] == '1',
+        'runs': etherscan_result['Runs'],
+        'evm_version': etherscan_result.get('EVMVersion', 'default'),
+        'viaIR': False  # Default, can be updated if needed
+    }
+    
+    # Save metadata (keeping original format for script compatibility)
+    save_constructor_and_metadata(contract_data, output_dir)
+    
+    # Create compilation config with transformed metadata
+    config_file = create_compilation_config(transformed_metadata, output_dir)
+    print('✅ Created compilation configuration')
+    
+    # Create compilation script with transformed metadata
+    script_file = create_compilation_script(transformed_metadata, output_dir, config_file)
+    print('✅ Created compilation script')
+    
+except Exception as e:
+    print(f'❌ Error: {e}')
+    sys.exit(1)
+" >/dev/null 2>&1
 
 if [ ! -d "$OUTPUT_DIR" ]; then
     echo "❌ Failed to fetch contract"
@@ -42,9 +113,12 @@ if [ ! -f "metadata.json" ]; then
     exit 1
 fi
 
-COMPILER_VERSION=$(jq -r '.compiler' metadata.json 2>/dev/null)
+# Extract compiler version from the nested Etherscan response structure
+COMPILER_VERSION=$(jq -r '.result[0].CompilerVersion' metadata.json 2>/dev/null)
 if [ "$COMPILER_VERSION" = "null" ] || [ -z "$COMPILER_VERSION" ]; then
     echo "❌ Could not extract compiler version from metadata"
+    echo "📋 Metadata structure:"
+    jq -r 'keys' metadata.json 2>/dev/null || echo "Invalid JSON"
     exit 1
 fi
 
@@ -60,13 +134,23 @@ if [[ ! "$SOLC_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-# Install and use the specific version
-solc-select install "$SOLC_VERSION" >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to install solc $SOLC_VERSION"
-    exit 1
+# Check if version is already installed before installing
+echo "🔍 Checking if solc $SOLC_VERSION is already installed..."
+if solc-select versions | grep -q "^$SOLC_VERSION"; then
+    echo "✅ Solc $SOLC_VERSION already installed, skipping installation"
+else
+    echo "📥 Installing solc $SOLC_VERSION..."
+    # Install the specific version
+    solc-select install "$SOLC_VERSION" >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "❌ Failed to install solc $SOLC_VERSION"
+        exit 1
+    fi
+    echo "✅ Solc $SOLC_VERSION installed successfully"
 fi
 
+# Switch to the specific version
+echo "🔄 Switching to solc $SOLC_VERSION..."
 solc-select use "$SOLC_VERSION" >/dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo "❌ Failed to switch to solc $SOLC_VERSION"
@@ -95,8 +179,8 @@ fi
 # Step 4: Extract and compare bytecode
 echo "🔍 Comparing bytecode..."
 
-# Find the main contract name from metadata
-CONTRACT_NAME=$(jq -r '.name' metadata.json 2>/dev/null || echo "Contract")
+# Find the main contract name from metadata (nested structure)
+CONTRACT_NAME=$(jq -r '.result[0].ContractName' metadata.json 2>/dev/null || echo "Contract")
 
 # Extract runtime bytecode using the correct path
 RUNTIME_BYTECODE=""
@@ -120,10 +204,16 @@ fi
 echo "📥 Fetching deployed bytecode..."
 cd ..
 python3 -c "
-from prepare_solc_data import fetch_deployed_bytecode
 import sys
+sys.path.append('.')
+from src.core.etherscan import fetch_deployed_bytecode
+from src.core.config import get_api_key
 try:
-    bytecode = fetch_deployed_bytecode('$CONTRACT_ADDRESS', '3423448X2KEQ7MPR9825NGUY99AHVUG51C')
+    api_key = get_api_key()
+    if not api_key:
+        print('❌ No API key found')
+        sys.exit(1)
+    bytecode = fetch_deployed_bytecode('$CONTRACT_ADDRESS', api_key)
     if bytecode:
         with open('$OUTPUT_DIR/deployed_runtime_raw.txt', 'w') as f:
             f.write(bytecode)
