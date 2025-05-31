@@ -82,6 +82,72 @@ def convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, bytecode):
     
     return ';'.join(pc_sourcemap)
 
+def convert_sourcemap_to_json_array(sourcemap, sources=None):
+    """
+    Convert sourcemap string to JSON array of objects with pc,s,l,f,j,m,code keys
+    Only includes non-empty entries with their PC positions and source code snippets
+    
+    Args:
+        sourcemap (str): Sourcemap string with semicolon-separated entries
+        sources (dict): Dictionary of source files {file_index: {"content": "source code"}}
+        
+    Returns:
+        list: Array of objects with keys pc,s,l,f,j,m,code (only non-empty entries)
+    """
+    if not sourcemap:
+        return []
+        
+    entries = sourcemap.split(';')
+    json_array = []
+    
+    # Track previous values for inheritance
+    prev_s, prev_l, prev_f, prev_j, prev_m = "0", "0", "0", "-", "0"
+    
+    for pc, entry in enumerate(entries):
+        if entry.strip():  # Only process non-empty entries
+            # Parse the entry
+            parts = entry.split(':')
+            
+            # Use provided values or inherit from previous
+            s = parts[0] if len(parts) > 0 and parts[0] else prev_s
+            l = parts[1] if len(parts) > 1 and parts[1] else prev_l  
+            f = parts[2] if len(parts) > 2 and parts[2] else prev_f
+            j = parts[3] if len(parts) > 3 and parts[3] else prev_j
+            m = parts[4] if len(parts) > 4 and parts[4] else prev_m
+            
+            # Update previous values for next iteration
+            if len(parts) > 0 and parts[0]: prev_s = s
+            if len(parts) > 1 and parts[1]: prev_l = l
+            if len(parts) > 2 and parts[2]: prev_f = f
+            if len(parts) > 3 and parts[3]: prev_j = j
+            if len(parts) > 4 and parts[4]: prev_m = m
+            
+            # Extract source code snippet
+            code = ""
+            if sources and f in sources and s.isdigit() and l.isdigit():
+                try:
+                    start_pos = int(s)
+                    length = int(l)
+                    source_content = sources[f].get('content', '')
+                    if start_pos >= 0 and length > 0 and start_pos < len(source_content):
+                        end_pos = min(start_pos + length, len(source_content))
+                        code = source_content[start_pos:end_pos]
+                except (ValueError, KeyError, IndexError):
+                    code = ""
+            
+            # Create JSON object for this non-empty entry
+            json_array.append({
+                "pc": pc,
+                "s": s,
+                "l": l, 
+                "f": f,
+                "j": j,
+                "m": m,
+                "code": code
+            })
+    
+    return json_array
+
 def selective_expand_sourcemap(sourcemap):
     """
     Selectively expand sourcemap:
@@ -148,6 +214,7 @@ def verify_contract():
         "contract_address": "0x...",
         "contract_name": "UniswapV2Router02",
         "sourcemap": "26978:430:0:-:0;;;;;;12:1:-1;9;2:12",
+        "jsonSourceMap": [{"s": "26978", "l": "430", "f": "0", "j": "-", "m": "0"}, {"s": "12", "l": "1", "f": "-1", "j": "9", "m": "2"}, {"s": "2", "l": "12", "f": "0", "j": "-", "m": "0"}],
         "sources": {
             "0": {
                 "path": "main.sol",
@@ -388,11 +455,15 @@ def extract_verification_data(verification_dir, contract_address, expand_sourcem
     # Check bytecode match from verification output
     bytecode_match = "PERFECT MATCH" in open(os.path.join(verification_dir, '../verification.log'), 'a+').read() if os.path.exists(os.path.join(verification_dir, '../verification.log')) else None
     
+    # Generate JSON sourcemap array
+    json_sourcemap = convert_sourcemap_to_json_array(sourcemap, sources)
+    
     return {
         "success": True,
         "contract_address": contract_address,
         "contract_name": contract_name,
         "sourcemap": sourcemap,
+        "jsonSourceMap": json_sourcemap,
         "sources": sources,
         "verification_info": {
             "timestamp": datetime.now().isoformat(),
@@ -400,6 +471,7 @@ def extract_verification_data(verification_dir, contract_address, expand_sourcem
             "verification_directory": verification_dir,
             "total_source_files": len(sources),
             "sourcemap_size": len(sourcemap),
+            "json_sourcemap_entries": len(json_sourcemap),
             "sourcemap_type": "pc_based",
             "sourcemap_expanded": expand_sourcemap
         }
@@ -433,6 +505,7 @@ def home():
                     "contract_address": "string",
                     "contract_name": "string", 
                     "sourcemap": "string",
+                    "jsonSourceMap": "array",
                     "sources": {
                         "0": {
                             "path": "string",
