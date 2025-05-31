@@ -82,6 +82,55 @@ def convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, bytecode):
     
     return ';'.join(pc_sourcemap)
 
+def selective_expand_sourcemap(sourcemap):
+    """
+    Selectively expand sourcemap:
+    - Keep empty entries (between ; and ;) as empty
+    - Expand entries with at least 1 parameter to always have 5 parameters
+    
+    Args:
+        sourcemap (str): Original sourcemap with compression
+        
+    Returns:
+        str: Selectively expanded sourcemap
+    """
+    if not sourcemap:
+        return sourcemap
+        
+    entries = sourcemap.split(';')
+    expanded_entries = []
+    
+    # Track previous values for inheritance
+    prev_s, prev_l, prev_f, prev_j, prev_m = "0", "0", "0", "-", "0"
+    
+    for entry in entries:
+        if entry.strip():  # Non-empty entry - expand it
+            # Parse the entry
+            parts = entry.split(':')
+            
+            # Use provided values or inherit from previous
+            s = parts[0] if len(parts) > 0 and parts[0] else prev_s
+            l = parts[1] if len(parts) > 1 and parts[1] else prev_l  
+            f = parts[2] if len(parts) > 2 and parts[2] else prev_f
+            j = parts[3] if len(parts) > 3 and parts[3] else prev_j
+            m = parts[4] if len(parts) > 4 and parts[4] else prev_m
+            
+            # Update previous values for next iteration
+            if len(parts) > 0 and parts[0]: prev_s = s
+            if len(parts) > 1 and parts[1]: prev_l = l
+            if len(parts) > 2 and parts[2]: prev_f = f
+            if len(parts) > 3 and parts[3]: prev_j = j
+            if len(parts) > 4 and parts[4]: prev_m = m
+            
+            # Create full 5-parameter entry
+            expanded_entry = f"{s}:{l}:{f}:{j}:{m}"
+            expanded_entries.append(expanded_entry)
+        else:
+            # Empty entry - keep it empty
+            expanded_entries.append("")
+    
+    return ';'.join(expanded_entries)
+
 @app.route('/verify', methods=['POST'])
 def verify_contract():
     """
@@ -89,7 +138,8 @@ def verify_contract():
     
     Request JSON:
     {
-        "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+        "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+        "expand_sourcemap": false  // Optional: expand non-empty sourcemap entries to 5 parameters
     }
     
     Response JSON:
@@ -107,7 +157,9 @@ def verify_contract():
         "verification_info": {
             "timestamp": "2025-05-31T11:35:00",
             "compiler_version": "v0.6.6+commit.6c089d02",
-            "bytecode_match": true
+            "bytecode_match": true,
+            "sourcemap_type": "pc_based",
+            "sourcemap_expanded": false
         }
     }
     """
@@ -121,6 +173,7 @@ def verify_contract():
             }), 400
         
         contract_address = data['address']
+        expand_sourcemap = data.get('expand_sourcemap', False)  # Optional parameter
         
         # Validate address format
         if not contract_address.startswith('0x') or len(contract_address) != 42:
@@ -162,7 +215,7 @@ def verify_contract():
             }), 500
         
         # Extract data from verification results
-        response_data = extract_verification_data(verification_dir, contract_address)
+        response_data = extract_verification_data(verification_dir, contract_address, expand_sourcemap)
         
         print(f"✅ Verification completed for {contract_address}")
         return jsonify(response_data)
@@ -174,7 +227,7 @@ def verify_contract():
         }), 500
 
 
-def extract_verification_data(verification_dir, contract_address):
+def extract_verification_data(verification_dir, contract_address, expand_sourcemap=False):
     """Extract sourcemap and source files from verification directory"""
     
     # Read sourcemap
@@ -240,6 +293,13 @@ def extract_verification_data(verification_dir, contract_address):
             original_sourcemap = sourcemap
             sourcemap = convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, runtime_bytecode)
             print(f"✅ Converted sourcemap: {len(original_sourcemap)} -> {len(sourcemap)} chars")
+            
+            # Apply selective expansion if requested
+            if expand_sourcemap:
+                print(f"📈 Applying selective expansion to sourcemap...")
+                pre_expansion_length = len(sourcemap)
+                sourcemap = selective_expand_sourcemap(sourcemap)
+                print(f"✅ Expanded sourcemap: {pre_expansion_length} -> {len(sourcemap)} chars")
         
         # Extract original sources with correct indexing
         sources_data = compilation_data.get('sources', {})
@@ -340,7 +400,8 @@ def extract_verification_data(verification_dir, contract_address):
             "verification_directory": verification_dir,
             "total_source_files": len(sources),
             "sourcemap_size": len(sourcemap),
-            "sourcemap_type": "pc_based"
+            "sourcemap_type": "pc_based",
+            "sourcemap_expanded": expand_sourcemap
         }
     }
 
@@ -364,7 +425,8 @@ def home():
             "POST /verify": {
                 "description": "Verify contract and get sourcemap with source files",
                 "body": {
-                    "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+                    "address": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+                    "expand_sourcemap": "false (optional - expand non-empty sourcemap entries to 5 parameters)"
                 },
                 "response": {
                     "success": True,
@@ -386,6 +448,7 @@ def home():
         },
         "usage": [
             "curl -X POST http://localhost:5000/verify -H 'Content-Type: application/json' -d '{\"address\": \"0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D\"}'",
+            "curl -X POST http://localhost:5000/verify -H 'Content-Type: application/json' -d '{\"address\": \"0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D\", \"expand_sourcemap\": true}'",
             "curl http://localhost:5000/health"
         ]
     })
