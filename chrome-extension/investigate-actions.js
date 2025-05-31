@@ -2,6 +2,30 @@
 class InvestigationActions {
   constructor() {
     this.setupEventListeners();
+    this.funnyMessages = [
+      "Asking Sam Altman for advice...",
+      "Bribing block builders with coffee...",
+      "Teaching AI the difference between revert and require...",
+      "Convincing Vitalik to explain the transaction...",
+      "Reading Satoshi's original white paper...",
+      "Asking ChatGPT if it's smarter than GPT-4...",
+      "Summoning the spirit of Hal Finney...",
+      "Debugging smart contracts with rubber ducks...",
+      "Converting gas fees to pizza slices for better understanding...",
+      "Teaching the AI to count in wei...",
+      "Asking Stack Overflow for transaction help...",
+      "Consulting the Ethereum Yellow Paper (again)...",
+      "Deciphering what the smart contract author meant...",
+      "Explaining to AI why gas costs so much...",
+      "Teaching machine learning about human learning curves...",
+      "Converting transaction logs to haikus...",
+      "Asking Ethereum if it's feeling okay today...",
+      "Translating Solidity errors to human language...",
+      "Consulting the blockchain gods for wisdom..."
+    ];
+    this.funnyMessageInterval = null;
+    this.funnyMessageTimeout = null; // Track the initial timeout
+    this.usedFunnyMessages = []; // Track used messages to avoid repetition
   }
 
   setupEventListeners() {
@@ -82,6 +106,13 @@ class InvestigationActions {
         </div>
       </div>
     `;
+
+    // Start funny messages only once when analysis begins
+    const currentActionDiv = document.getElementById('current-action');
+    const funnyMessageDiv = document.createElement('div');
+    funnyMessageDiv.className = `funny-message ${themeClass}`;
+    currentActionDiv.appendChild(funnyMessageDiv);
+    this.startFunnyMessages(funnyMessageDiv);
 
     try {
       await this.connectToAnalysisServer(txHash, resultsDiv);
@@ -167,7 +198,7 @@ class InvestigationActions {
         
         let scriptDisplayName = message.script;
         if (message.script === 'clean_trace.py') {
-          scriptDisplayName = 'Trace Postprocessing';
+          scriptDisplayName = '🔧 Trace Postprocessing';
         }
         this.updateCurrentAction(currentActionDiv, scriptDisplayName, 'script');
         break;
@@ -214,9 +245,89 @@ class InvestigationActions {
     if (loadingDots) {
       loadingDots.className = `loading-dots ${themeClass}`;
     }
+    
+    // Update funny message theme if it exists
+    const funnyMessageDiv = currentActionDiv.querySelector('.funny-message');
+    if (funnyMessageDiv) {
+      funnyMessageDiv.className = `funny-message ${themeClass}`;
+    }
+    
+    // Stop funny messages when analysis completes
+    if (type === 'complete') {
+      this.stopFunnyMessages();
+      if (funnyMessageDiv) {
+        funnyMessageDiv.textContent = ''; // Clear funny message when complete
+      }
+    }
+  }
+
+  startFunnyMessages(funnyMessageDiv) {
+    // Clear any existing timers to prevent multiple intervals
+    this.stopFunnyMessages();
+    
+    // Reset used messages for new analysis
+    this.usedFunnyMessages = [];
+    
+    // Wait 3 seconds before starting funny messages so users can read the main status
+    this.funnyMessageTimeout = setTimeout(() => {
+      // Clear the timeout reference since it's completed
+      this.funnyMessageTimeout = null;
+      
+      // Show first funny message
+      if (funnyMessageDiv) {
+        this.showRandomFunnyMessage(funnyMessageDiv);
+      }
+      
+      // Then show new messages every 4 seconds
+      this.funnyMessageInterval = setInterval(() => {
+        if (funnyMessageDiv) {
+          this.showRandomFunnyMessage(funnyMessageDiv);
+        }
+      }, 4000);
+    }, 3000);
+  }
+
+  stopFunnyMessages() {
+    // Clear the interval if it exists
+    if (this.funnyMessageInterval) {
+      clearInterval(this.funnyMessageInterval);
+      this.funnyMessageInterval = null;
+    }
+    
+    // Clear the initial timeout if it exists
+    if (this.funnyMessageTimeout) {
+      clearTimeout(this.funnyMessageTimeout);
+      this.funnyMessageTimeout = null;
+    }
+  }
+
+  showRandomFunnyMessage(funnyMessageDiv) {
+    // If we've used all messages, reset the used list
+    if (this.usedFunnyMessages.length >= this.funnyMessages.length) {
+      this.usedFunnyMessages = [];
+    }
+    
+    // Find unused messages
+    const unusedMessages = this.funnyMessages.filter(msg => !this.usedFunnyMessages.includes(msg));
+    
+    // Pick a random unused message
+    const randomMessage = unusedMessages[Math.floor(Math.random() * unusedMessages.length)];
+    
+    // Mark this message as used
+    this.usedFunnyMessages.push(randomMessage);
+    
+    // If there's already content, add a line break before the new message
+    if (funnyMessageDiv.textContent && funnyMessageDiv.textContent.trim()) {
+      funnyMessageDiv.textContent += '\n' + randomMessage;
+    } else {
+      funnyMessageDiv.textContent = randomMessage;
+    }
   }
 
   showAnalysisResults(message, resultsDiv) {
+    // Stop any funny messages when showing results
+    this.stopFunnyMessages();
+    
     // Format the analysis result as markdown
     const analysisData = message.data || 'No analysis data received';
     const formattedHtml = this.markdownToHtml(analysisData);
