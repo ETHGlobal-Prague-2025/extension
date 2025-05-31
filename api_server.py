@@ -14,6 +14,99 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+def convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, bytecode):
+    """
+    Convert instruction-based sourcemap to PC-based sourcemap.
+    
+    Args:
+        sourcemap (str): Instruction-based sourcemap from compilation
+        bytecode (str): Hex bytecode string (without 0x prefix)
+    
+    Returns:
+        str: PC-based sourcemap in the same format
+    """
+    if not sourcemap or not bytecode:
+        return sourcemap
+    
+    # Remove 0x prefix if present
+    if bytecode.startswith('0x'):
+        bytecode = bytecode[2:]
+    
+    # Create instruction->PC mapping by parsing bytecode
+    instruction_to_pc = []
+    pc = 0
+    i = 0
+    
+    while i < len(bytecode):
+        instruction_to_pc.append(pc)
+        
+        # Get opcode (first byte)
+        if i + 1 >= len(bytecode):
+            break
+            
+        opcode = int(bytecode[i:i+2], 16)
+        pc += 1  # Opcode takes 1 byte
+        i += 2   # Move past opcode in hex string
+        
+        # Check if it's a PUSH instruction (0x60-0x7F)
+        if 0x60 <= opcode <= 0x7F:
+            # PUSH1 = 0x60, PUSH2 = 0x61, ..., PUSH32 = 0x7F
+            push_size = opcode - 0x5F  # Number of data bytes to push
+            pc += push_size           # Add data bytes to PC
+            i += push_size * 2        # Move past data bytes in hex string
+    
+    # Parse sourcemap and convert instruction offsets to PC offsets
+    sourcemap_entries = sourcemap.split(';')
+    pc_sourcemap_entries = []
+    
+    # Keep track of previous values for compression
+    prev_s, prev_l, prev_f, prev_j, prev_m = None, None, None, None, None
+    
+    for instruction_num, entry in enumerate(sourcemap_entries):
+        if not entry.strip():
+            # Empty entry, use previous values
+            pc_sourcemap_entries.append('')
+            continue
+            
+        parts = entry.split(':')
+        
+        # Parse entry components
+        s = parts[0] if len(parts) > 0 and parts[0] else prev_s
+        l = parts[1] if len(parts) > 1 and parts[1] else prev_l  
+        f = parts[2] if len(parts) > 2 and parts[2] else prev_f
+        j = parts[3] if len(parts) > 3 and parts[3] else prev_j
+        m = parts[4] if len(parts) > 4 and parts[4] else prev_m
+        
+        # Update previous values
+        if len(parts) > 0 and parts[0]: prev_s = s
+        if len(parts) > 1 and parts[1]: prev_l = l
+        if len(parts) > 2 and parts[2]: prev_f = f
+        if len(parts) > 3 and parts[3]: prev_j = j
+        if len(parts) > 4 and parts[4]: prev_m = m
+        
+        # Convert instruction number to PC
+        if instruction_num < len(instruction_to_pc):
+            pc_offset = instruction_to_pc[instruction_num]
+            
+            # Reconstruct entry with PC offset instead of instruction offset
+            pc_entry_parts = []
+            pc_entry_parts.append(str(pc_offset) if s is not None else '')
+            pc_entry_parts.append(l if l is not None else '')
+            pc_entry_parts.append(f if f is not None else '')
+            pc_entry_parts.append(j if j is not None else '')
+            pc_entry_parts.append(m if m is not None else '')
+            
+            # Remove trailing empty parts
+            while len(pc_entry_parts) > 1 and not pc_entry_parts[-1]:
+                pc_entry_parts.pop()
+                
+            pc_sourcemap_entries.append(':'.join(pc_entry_parts))
+        else:
+            # Fallback if we run out of instructions
+            pc_sourcemap_entries.append(entry)
+    
+    return ';'.join(pc_sourcemap_entries)
+
 @app.route('/verify', methods=['POST'])
 def verify_contract():
     """
@@ -119,6 +212,7 @@ def extract_verification_data(verification_dir, contract_address):
     # Read compilation output to get source file mapping and as fallback for sourcemap
     compilation_output_path = os.path.join(verification_dir, 'compilation_output.json')
     sources = {}
+    runtime_bytecode = ""
     
     if os.path.exists(compilation_output_path):
         with open(compilation_output_path, 'r') as f:
@@ -131,6 +225,7 @@ def extract_verification_data(verification_dir, contract_address):
             contracts = compilation_data.get('contracts', {})
             best_contract = None
             best_sourcemap = ''
+            best_bytecode = ''
             max_size = 0
             
             for file_path, file_contracts in contracts.items():
@@ -138,15 +233,38 @@ def extract_verification_data(verification_dir, contract_address):
                     evm = contract_data.get('evm', {})
                     deployed_bytecode = evm.get('deployedBytecode', {})
                     contract_sourcemap = deployed_bytecode.get('sourceMap', '')
+                    contract_bytecode = deployed_bytecode.get('object', '')
                     
                     if contract_sourcemap and len(contract_sourcemap) > max_size:
                         max_size = len(contract_sourcemap)
                         best_sourcemap = contract_sourcemap
+                        best_bytecode = contract_bytecode
                         best_contract = f'{file_path}::{contract_name}'
             
             if best_sourcemap:
                 sourcemap = best_sourcemap
+                runtime_bytecode = best_bytecode
                 print(f"✅ Using sourcemap from main contract: {best_contract} ({len(sourcemap)} chars)")
+        else:
+            # Find bytecode for the main contract when sourcemap is already good
+            contracts = compilation_data.get('contracts', {})
+            for file_path, file_contracts in contracts.items():
+                for contract_name, contract_data in file_contracts.items():
+                    evm = contract_data.get('evm', {})
+                    deployed_bytecode = evm.get('deployedBytecode', {})
+                    contract_bytecode = deployed_bytecode.get('object', '')
+                    if contract_bytecode:
+                        runtime_bytecode = contract_bytecode
+                        break
+                if runtime_bytecode:
+                    break
+        
+        # Convert instruction-based sourcemap to PC-based sourcemap
+        if sourcemap and runtime_bytecode:
+            print(f"🔄 Converting instruction-based sourcemap to PC-based sourcemap...")
+            original_sourcemap = sourcemap
+            sourcemap = convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, runtime_bytecode)
+            print(f"✅ Converted sourcemap: {len(original_sourcemap)} -> {len(sourcemap)} chars")
         
         # Extract original sources with correct indexing
         sources_data = compilation_data.get('sources', {})
@@ -246,7 +364,8 @@ def extract_verification_data(verification_dir, contract_address):
             "compiler_version": compiler_version,
             "verification_directory": verification_dir,
             "total_source_files": len(sources),
-            "sourcemap_size": len(sourcemap)
+            "sourcemap_size": len(sourcemap),
+            "sourcemap_type": "pc_based"
         }
     }
 
@@ -295,6 +414,105 @@ def home():
             "curl http://localhost:5000/health"
         ]
     })
+
+
+@app.route('/debug/sourcemap/<address>', methods=['GET'])
+def debug_sourcemap(address):
+    """
+    Debug endpoint to compare instruction-based vs PC-based sourcemaps
+    
+    Returns both the original instruction-based sourcemap and the converted PC-based sourcemap
+    """
+    try:
+        # Run verification to get data
+        result = subprocess.run(
+            ['./ultimate_verify.sh', address],
+            capture_output=True,
+            text=True,
+            cwd='.'
+        )
+        
+        # Find verification directory
+        verification_dirs = [d for d in os.listdir('.') if d.startswith('verification_')]
+        if not verification_dirs:
+            return jsonify({
+                "error": "No verification directory found"
+            }), 500
+        
+        verification_dir = max(verification_dirs, key=lambda x: os.path.getctime(x))
+        
+        # Read compilation output
+        compilation_output_path = os.path.join(verification_dir, 'compilation_output.json')
+        if not os.path.exists(compilation_output_path):
+            return jsonify({
+                "error": "No compilation output found"
+            }), 500
+        
+        with open(compilation_output_path, 'r') as f:
+            compilation_data = json.load(f)
+        
+        # Find main contract
+        contracts = compilation_data.get('contracts', {})
+        main_contract_data = None
+        main_contract_name = None
+        
+        for file_path, file_contracts in contracts.items():
+            for contract_name, contract_data in file_contracts.items():
+                evm = contract_data.get('evm', {})
+                deployed_bytecode = evm.get('deployedBytecode', {})
+                if deployed_bytecode.get('sourceMap'):
+                    main_contract_data = deployed_bytecode
+                    main_contract_name = f"{file_path}::{contract_name}"
+                    break
+            if main_contract_data:
+                break
+        
+        if not main_contract_data:
+            return jsonify({
+                "error": "No contract with sourcemap found"
+            }), 500
+        
+        instruction_sourcemap = main_contract_data['sourceMap']
+        bytecode = main_contract_data['object']
+        
+        # Convert to PC-based
+        pc_sourcemap = convert_instruction_sourcemap_to_pc_sourcemap(instruction_sourcemap, bytecode)
+        
+        # Analyze differences
+        instruction_entries = instruction_sourcemap.split(';')
+        pc_entries = pc_sourcemap.split(';')
+        
+        # Sample comparison (first 20 entries)
+        comparison = []
+        for i in range(min(20, len(instruction_entries), len(pc_entries))):
+            comparison.append({
+                "instruction_num": i,
+                "instruction_entry": instruction_entries[i],
+                "pc_entry": pc_entries[i]
+            })
+        
+        return jsonify({
+            "success": True,
+            "contract_address": address,
+            "contract": main_contract_name,
+            "instruction_sourcemap": {
+                "size": len(instruction_sourcemap),
+                "entries": len(instruction_entries),
+                "sample": instruction_sourcemap[:200] + "..." if len(instruction_sourcemap) > 200 else instruction_sourcemap
+            },
+            "pc_sourcemap": {
+                "size": len(pc_sourcemap),
+                "entries": len(pc_entries),
+                "sample": pc_sourcemap[:200] + "..." if len(pc_sourcemap) > 200 else pc_sourcemap
+            },
+            "bytecode_size": len(bytecode),
+            "comparison_sample": comparison
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "error": f"Debug error: {str(e)}"
+        }), 500
 
 
 if __name__ == '__main__':
