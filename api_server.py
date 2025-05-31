@@ -156,12 +156,18 @@ def extract_verification_data(verification_dir, contract_address):
             # Read the actual source file content
             source_content = source_info.get('content', '')
             
-            # If content is empty, try to read from the .sol file
+            # If content is empty, try to read from the specific .sol file
             if not source_content:
-                sol_files = [f for f in os.listdir(verification_dir) if f.endswith('.sol')]
-                if sol_files:
-                    with open(os.path.join(verification_dir, sol_files[0]), 'r') as f:
+                sol_file_path = os.path.join(verification_dir, file_path)
+                if os.path.exists(sol_file_path):
+                    with open(sol_file_path, 'r') as f:
                         source_content = f.read()
+                else:
+                    # Fallback: try to find the file by name
+                    sol_files = [f for f in os.listdir(verification_dir) if f.endswith('.sol') and f == file_path]
+                    if sol_files:
+                        with open(os.path.join(verification_dir, sol_files[0]), 'r') as f:
+                            source_content = f.read()
             
             sources[str(file_index)] = {
                 "path": file_path,
