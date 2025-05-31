@@ -303,6 +303,10 @@ def extract_verification_data(verification_dir, contract_address, expand_sourcem
     if os.path.exists(sourcemap_path):
         with open(sourcemap_path, 'r') as f:
             sourcemap = f.read().strip()
+        print(f"📄 Read runtime_sourcemap.txt: {len(sourcemap)} chars from {sourcemap_path}")
+        print(f"   First 100 chars: \"{sourcemap[:100]}\"")
+    else:
+        print(f"⚠️ No runtime_sourcemap.txt found at {sourcemap_path}")
     
     # Read compilation output to get source file mapping and as fallback for sourcemap
     compilation_output_path = os.path.join(verification_dir, 'compilation_output.json')
@@ -341,25 +345,52 @@ def extract_verification_data(verification_dir, contract_address, expand_sourcem
                 runtime_bytecode = best_bytecode
                 print(f"✅ Using sourcemap from main contract: {best_contract} ({len(sourcemap)} chars)")
         else:
-            # Find bytecode for the main contract when sourcemap is already good
+            print(f"✅ Using runtime_sourcemap.txt: {len(sourcemap)} chars")
+            # Find the correct bytecode that matches this deployed contract
+            # We need to find which contract in compilation corresponds to the deployed one
             contracts = compilation_data.get('contracts', {})
+            
+            # First, try to find UniswapV2Router02 specifically (main contract)
             for file_path, file_contracts in contracts.items():
                 for contract_name, contract_data in file_contracts.items():
-                    evm = contract_data.get('evm', {})
-                    deployed_bytecode = evm.get('deployedBytecode', {})
-                    contract_bytecode = deployed_bytecode.get('object', '')
-                    if contract_bytecode:
-                        runtime_bytecode = contract_bytecode
-                        break
+                    if 'Router' in contract_name or contract_name == 'UniswapV2Router02':
+                        evm = contract_data.get('evm', {})
+                        deployed_bytecode = evm.get('deployedBytecode', {})
+                        contract_bytecode = deployed_bytecode.get('object', '')
+                        if contract_bytecode and len(contract_bytecode) > 10000:  # Main contract should be large
+                            runtime_bytecode = contract_bytecode
+                            print(f"🔧 Found main contract bytecode from {file_path}::{contract_name}: {len(contract_bytecode)} chars")
+                            break
                 if runtime_bytecode:
                     break
+            
+            # If not found, look for the largest contract (likely the main one)
+            if not runtime_bytecode:
+                max_size = 0
+                best_contract = None
+                for file_path, file_contracts in contracts.items():
+                    for contract_name, contract_data in file_contracts.items():
+                        evm = contract_data.get('evm', {})
+                        deployed_bytecode = evm.get('deployedBytecode', {})
+                        contract_bytecode = deployed_bytecode.get('object', '')
+                        if contract_bytecode and len(contract_bytecode) > max_size:
+                            max_size = len(contract_bytecode)
+                            runtime_bytecode = contract_bytecode
+                            best_contract = f'{file_path}::{contract_name}'
+                
+                if runtime_bytecode:
+                    print(f"🔧 Found largest contract bytecode from {best_contract}: {len(runtime_bytecode)} chars")
         
         # Convert instruction-based sourcemap to PC-based sourcemap
         if sourcemap and runtime_bytecode:
             print(f"🔄 Converting instruction-based sourcemap to PC-based sourcemap...")
+            print(f"   Input sourcemap: {len(sourcemap)} chars")
+            print(f"   Input bytecode: {len(runtime_bytecode)} chars")
+            print(f"   Bytecode sample: \"{runtime_bytecode[:100]}\"")
             original_sourcemap = sourcemap
             sourcemap = convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, runtime_bytecode)
             print(f"✅ Converted sourcemap: {len(original_sourcemap)} -> {len(sourcemap)} chars")
+            print(f"   Output sample: \"{sourcemap[:100]}\"")
             
             # Apply selective expansion if requested
             if expand_sourcemap:
@@ -367,6 +398,8 @@ def extract_verification_data(verification_dir, contract_address, expand_sourcem
                 pre_expansion_length = len(sourcemap)
                 sourcemap = selective_expand_sourcemap(sourcemap)
                 print(f"✅ Expanded sourcemap: {pre_expansion_length} -> {len(sourcemap)} chars")
+        else:
+            print(f"⚠️ Skipping PC conversion - sourcemap: {len(sourcemap) if sourcemap else 0} chars, bytecode: {len(runtime_bytecode) if runtime_bytecode else 0} chars")
         
         # Extract original sources with correct indexing
         sources_data = compilation_data.get('sources', {})
