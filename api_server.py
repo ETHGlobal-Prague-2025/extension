@@ -16,14 +16,15 @@ app = Flask(__name__)
 
 def convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, bytecode):
     """
-    Convert instruction-based sourcemap to PC-based sourcemap.
+    Convert instruction-based sourcemap to PC-based sourcemap by inserting empty entries
+    for PUSH instruction data bytes.
     
     Args:
         sourcemap (str): Instruction-based sourcemap from compilation
         bytecode (str): Hex bytecode string (without 0x prefix)
     
     Returns:
-        str: PC-based sourcemap in the same format
+        str: PC-based sourcemap with empty entries for PUSH data bytes
     """
     if not sourcemap or not bytecode:
         return sourcemap
@@ -32,13 +33,17 @@ def convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, bytecode):
     if bytecode.startswith('0x'):
         bytecode = bytecode[2:]
     
-    # Create instruction->PC mapping by parsing bytecode
-    instruction_to_pc = []
+    # Parse bytecode to find PUSH instructions and their data bytes
+    pc_to_instruction = {}  # Maps PC -> instruction number (only for opcodes)
+    instruction_to_pc = {}  # Maps instruction number -> PC
     pc = 0
-    i = 0
+    instruction_num = 0
     
+    i = 0
     while i < len(bytecode):
-        instruction_to_pc.append(pc)
+        # Map this PC to current instruction
+        pc_to_instruction[pc] = instruction_num
+        instruction_to_pc[instruction_num] = pc
         
         # Get opcode (first byte)
         if i + 1 >= len(bytecode):
@@ -47,65 +52,35 @@ def convert_instruction_sourcemap_to_pc_sourcemap(sourcemap, bytecode):
         opcode = int(bytecode[i:i+2], 16)
         pc += 1  # Opcode takes 1 byte
         i += 2   # Move past opcode in hex string
+        instruction_num += 1
         
         # Check if it's a PUSH instruction (0x60-0x7F)
         if 0x60 <= opcode <= 0x7F:
             # PUSH1 = 0x60, PUSH2 = 0x61, ..., PUSH32 = 0x7F
             push_size = opcode - 0x5F  # Number of data bytes to push
+            
+            # The data bytes don't correspond to any instruction
+            # We'll insert empty entries for these PCs
             pc += push_size           # Add data bytes to PC
             i += push_size * 2        # Move past data bytes in hex string
     
-    # Parse sourcemap and convert instruction offsets to PC offsets
+    # Parse original sourcemap
     sourcemap_entries = sourcemap.split(';')
-    pc_sourcemap_entries = []
     
-    # Keep track of previous values for compression
-    prev_s, prev_l, prev_f, prev_j, prev_m = None, None, None, None, None
+    # Create PC-based sourcemap by inserting entries at appropriate PC positions
+    max_pc = max(pc_to_instruction.keys()) if pc_to_instruction else 0
+    pc_sourcemap = [''] * (max_pc + 1)
     
-    for instruction_num, entry in enumerate(sourcemap_entries):
-        if not entry.strip():
-            # Empty entry, use previous values
-            pc_sourcemap_entries.append('')
-            continue
-            
-        parts = entry.split(':')
-        
-        # Parse entry components
-        s = parts[0] if len(parts) > 0 and parts[0] else prev_s
-        l = parts[1] if len(parts) > 1 and parts[1] else prev_l  
-        f = parts[2] if len(parts) > 2 and parts[2] else prev_f
-        j = parts[3] if len(parts) > 3 and parts[3] else prev_j
-        m = parts[4] if len(parts) > 4 and parts[4] else prev_m
-        
-        # Update previous values
-        if len(parts) > 0 and parts[0]: prev_s = s
-        if len(parts) > 1 and parts[1]: prev_l = l
-        if len(parts) > 2 and parts[2]: prev_f = f
-        if len(parts) > 3 and parts[3]: prev_j = j
-        if len(parts) > 4 and parts[4]: prev_m = m
-        
-        # Convert instruction number to PC
-        if instruction_num < len(instruction_to_pc):
-            pc_offset = instruction_to_pc[instruction_num]
-            
-            # Reconstruct entry with PC offset instead of instruction offset
-            pc_entry_parts = []
-            pc_entry_parts.append(str(pc_offset) if s is not None else '')
-            pc_entry_parts.append(l if l is not None else '')
-            pc_entry_parts.append(f if f is not None else '')
-            pc_entry_parts.append(j if j is not None else '')
-            pc_entry_parts.append(m if m is not None else '')
-            
-            # Remove trailing empty parts
-            while len(pc_entry_parts) > 1 and not pc_entry_parts[-1]:
-                pc_entry_parts.pop()
-                
-            pc_sourcemap_entries.append(':'.join(pc_entry_parts))
-        else:
-            # Fallback if we run out of instructions
-            pc_sourcemap_entries.append(entry)
+    # Fill in the sourcemap entries at PCs that correspond to actual instructions
+    for pc in range(max_pc + 1):
+        if pc in pc_to_instruction:
+            instruction_idx = pc_to_instruction[pc]
+            if instruction_idx < len(sourcemap_entries):
+                pc_sourcemap[pc] = sourcemap_entries[instruction_idx]
+            # else: leave empty (will inherit from previous)
+        # else: leave empty for PUSH data bytes
     
-    return ';'.join(pc_sourcemap_entries)
+    return ';'.join(pc_sourcemap)
 
 @app.route('/verify', methods=['POST'])
 def verify_contract():
