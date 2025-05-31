@@ -116,13 +116,37 @@ def extract_verification_data(verification_dir, contract_address):
         with open(sourcemap_path, 'r') as f:
             sourcemap = f.read().strip()
     
-    # Read compilation output to get source file mapping
+    # Read compilation output to get source file mapping and as fallback for sourcemap
     compilation_output_path = os.path.join(verification_dir, 'compilation_output.json')
     sources = {}
     
     if os.path.exists(compilation_output_path):
         with open(compilation_output_path, 'r') as f:
             compilation_data = json.load(f)
+        
+        # If sourcemap is too small (likely a library), find the main contract
+        if not sourcemap or len(sourcemap) < 1000:  # Threshold to detect library vs main contract
+            print(f"⚠️ Sourcemap too small ({len(sourcemap)} chars), finding main contract...")
+            
+            contracts = compilation_data.get('contracts', {})
+            best_contract = None
+            best_sourcemap = ''
+            max_size = 0
+            
+            for file_path, file_contracts in contracts.items():
+                for contract_name, contract_data in file_contracts.items():
+                    evm = contract_data.get('evm', {})
+                    deployed_bytecode = evm.get('deployedBytecode', {})
+                    contract_sourcemap = deployed_bytecode.get('sourceMap', '')
+                    
+                    if contract_sourcemap and len(contract_sourcemap) > max_size:
+                        max_size = len(contract_sourcemap)
+                        best_sourcemap = contract_sourcemap
+                        best_contract = f'{file_path}::{contract_name}'
+            
+            if best_sourcemap:
+                sourcemap = best_sourcemap
+                print(f"✅ Using sourcemap from main contract: {best_contract} ({len(sourcemap)} chars)")
         
         # Extract original sources with correct indexing
         sources_data = compilation_data.get('sources', {})
@@ -215,7 +239,8 @@ def extract_verification_data(verification_dir, contract_address):
             "timestamp": datetime.now().isoformat(),
             "compiler_version": compiler_version,
             "verification_directory": verification_dir,
-            "total_source_files": len(sources)
+            "total_source_files": len(sources),
+            "sourcemap_size": len(sourcemap)
         }
     }
 

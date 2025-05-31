@@ -187,9 +187,11 @@ try:
     with open('compilation_output.json', 'r') as f:
         compilation_output = json.load(f)
     
-    # Extract runtime sourcemap
+    # Extract runtime sourcemap - find the main contract (largest sourcemap)
     contracts = compilation_output.get('contracts', {})
-    sourcemap_found = False
+    best_contract = None
+    best_sourcemap = ''
+    max_size = 0
     
     for file_path, file_contracts in contracts.items():
         for contract_name, contract_data in file_contracts.items():
@@ -197,17 +199,17 @@ try:
             deployed_bytecode = evm.get('deployedBytecode', {})
             sourcemap = deployed_bytecode.get('sourceMap', '')
             
-            if sourcemap:
-                with open('runtime_sourcemap.txt', 'w') as f:
-                    f.write(sourcemap)
-                print(f'✅ Runtime sourcemap saved to: runtime_sourcemap.txt')
-                print(f'📊 Sourcemap length: {len(sourcemap)} characters')
-                sourcemap_found = True
-                break
-        if sourcemap_found:
-            break
+            if sourcemap and len(sourcemap) > max_size:
+                max_size = len(sourcemap)
+                best_sourcemap = sourcemap
+                best_contract = f'{file_path}::{contract_name}'
     
-    if not sourcemap_found:
+    if best_sourcemap:
+        with open('runtime_sourcemap.txt', 'w') as f:
+            f.write(best_sourcemap)
+        print(f'✅ Runtime sourcemap extracted from: {best_contract}')
+        print(f'📊 Sourcemap length: {len(best_sourcemap)} characters')
+    else:
         print('⚠️ No runtime sourcemap found in compilation output')
     
 except Exception as e:
